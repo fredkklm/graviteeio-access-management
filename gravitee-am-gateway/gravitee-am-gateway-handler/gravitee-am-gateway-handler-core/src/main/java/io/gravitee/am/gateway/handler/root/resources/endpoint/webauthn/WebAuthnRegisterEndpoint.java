@@ -107,6 +107,7 @@ public class WebAuthnRegisterEndpoint extends WebAuthnEndpoint {
                 routingContext.session().put(WEBAUTHN_SKIPPED_KEY, true);
                 // Now redirect back to the original url
                 doRedirect(routingContext.response(), returnURL);
+                return;
             }
 
             // prepare the context
@@ -129,12 +130,12 @@ public class WebAuthnRegisterEndpoint extends WebAuthnEndpoint {
                     routingContext.response().putHeader(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_HTML);
                     routingContext.response().end(res.result());
                 } else {
-                    logger.error("Unable to render WebAuthn login page", res.cause());
+                    logger.error("Unable to render WebAuthn register page", res.cause());
                     routingContext.fail(res.cause());
                 }
             });
         } catch (Exception ex) {
-            logger.error("An error occurs while rendering WebAuthn login page", ex);
+            logger.error("An has occurred while rendering WebAuthn login page", ex);
             routingContext.fail(503);
         }
     }
@@ -179,12 +180,10 @@ public class WebAuthnRegisterEndpoint extends WebAuthnEndpoint {
                 return;
             }
 
-            // register credentials
-            WebAuthnSettings webAuthnSettings = domain.getWebAuthnSettings();
-            AuthenticatorAttachment authenticatorAttachment = webAuthnSettings != null ? webAuthnSettings.getAuthenticatorAttachment() : null;
+            // get authenticated user
             User user = ((io.gravitee.am.gateway.handler.common.vertx.web.auth.user.User) ctx.user().getDelegate()).getUser();
-            webauthnRegister.put("id", user.getId());
-            webauthnRegister.put("type", authenticatorAttachment != null ? authenticatorAttachment.getValue() : "unspecified");
+
+            // register credentials
             webAuthn.createCredentialsOptions(webauthnRegister, createCredentialsOptions -> {
                 if (createCredentialsOptions.failed()) {
                     ctx.fail(createCredentialsOptions.cause());
@@ -192,6 +191,8 @@ public class WebAuthnRegisterEndpoint extends WebAuthnEndpoint {
                 }
 
                 final JsonObject credentialsOptions = createCredentialsOptions.result();
+                // force user id with our own user id
+                credentialsOptions.getJsonObject("user").put("id", user.getId());
 
                 // save challenge to the session
                 ctx.session()

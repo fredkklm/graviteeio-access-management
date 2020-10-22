@@ -58,7 +58,7 @@
                 <p>Please go back to your client application and try again, or contact the owner and ask for support</p>
             </div>
             <div class="registration-confirmation-error-info">
-                Error description : <span th:text="${error}" class="error"></span>
+                Error description : <span th:text="*{error_description}?: ${error}" class="error"></span>
             </div>
         </div>
     </div>

@@ -17,10 +17,10 @@ package io.gravitee.am.gateway.handler.oauth2.resources.handler.authorization.co
 
 import io.gravitee.am.common.exception.oauth2.InvalidRequestException;
 import io.gravitee.am.gateway.handler.common.client.ClientSyncService;
+import io.gravitee.am.gateway.handler.common.utils.ConstantKeys;
 import io.gravitee.am.gateway.handler.oauth2.exception.AccessDeniedException;
 import io.gravitee.am.gateway.handler.oauth2.exception.ServerErrorException;
 import io.gravitee.am.gateway.handler.oauth2.service.request.AuthorizationRequest;
-import io.gravitee.am.gateway.handler.oauth2.service.utils.OAuth2Constants;
 import io.gravitee.am.model.oidc.Client;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -34,12 +34,7 @@ import io.vertx.reactivex.ext.web.RoutingContext;
  */
 public class UserConsentPrepareContextHandler implements Handler<RoutingContext> {
 
-    private static final String CLIENT_CONTEXT_KEY = "client";
-    private static final String USER_CONTEXT_KEY = "user";
-    private static final String AUTHORIZATION_REQUEST_CONTEXT_KEY = "authorizationRequest";
-    private static final String ID_TOKEN_SESSION_CONTEXT_KEY = "id_token";
-    private static final String ID_TOKEN_CONTEXT_KEY = "idToken";
-    private ClientSyncService clientSyncService;
+    private final ClientSyncService clientSyncService;
 
     public UserConsentPrepareContextHandler(ClientSyncService clientSyncService) {
         this.clientSyncService = clientSyncService;
@@ -48,14 +43,14 @@ public class UserConsentPrepareContextHandler implements Handler<RoutingContext>
     @Override
     public void handle(RoutingContext routingContext) {
         // user must redirected here after an authorization request
-        AuthorizationRequest authorizationRequest = routingContext.session().get(OAuth2Constants.AUTHORIZATION_REQUEST);
+        AuthorizationRequest authorizationRequest = routingContext.get(ConstantKeys.AUTHORIZATION_REQUEST_CONTEXT_KEY);
         if (authorizationRequest == null) {
             routingContext.response().setStatusCode(400).end("An authorization request is required to handle user approval");
             return;
         }
 
-        // check client
-        authenticate(authorizationRequest.getClientId(), resultHandler -> {
+        // Fetch the client using the given clientId.
+        fetchClient(authorizationRequest.getClientId(), resultHandler -> {
             if (resultHandler.failed()) {
                 routingContext.fail(resultHandler.cause());
                 return;
@@ -63,7 +58,7 @@ public class UserConsentPrepareContextHandler implements Handler<RoutingContext>
 
             // check user
             User authenticatedUser = routingContext.user();
-            if (authenticatedUser == null || ! (authenticatedUser.getDelegate() instanceof io.gravitee.am.gateway.handler.common.vertx.web.auth.user.User)) {
+            if (authenticatedUser == null || !(authenticatedUser.getDelegate() instanceof io.gravitee.am.gateway.handler.common.vertx.web.auth.user.User)) {
                 routingContext.fail(new AccessDeniedException());
                 return;
             }
@@ -72,14 +67,14 @@ public class UserConsentPrepareContextHandler implements Handler<RoutingContext>
             Client safeClient = new Client(resultHandler.result());
             safeClient.setClientSecret(null);
             io.gravitee.am.model.User user = ((io.gravitee.am.gateway.handler.common.vertx.web.auth.user.User) authenticatedUser.getDelegate()).getUser();
-            prepareContext(routingContext, safeClient, user, authorizationRequest);
+            prepareContext(routingContext, safeClient, user);
 
             routingContext.next();
         });
 
     }
 
-    private void authenticate(String clientId, Handler<AsyncResult<Client>> authHandler) {
+    private void fetchClient(String clientId, Handler<AsyncResult<Client>> authHandler) {
         clientSyncService
                 .findByClientId(clientId)
                 .subscribe(
@@ -89,15 +84,14 @@ public class UserConsentPrepareContextHandler implements Handler<RoutingContext>
                 );
     }
 
-    private void prepareContext(RoutingContext context, Client client, io.gravitee.am.model.User user, AuthorizationRequest authorizationRequest) {
-        context.put(CLIENT_CONTEXT_KEY, client);
-        context.put(USER_CONTEXT_KEY, user);
-        context.put(AUTHORIZATION_REQUEST_CONTEXT_KEY, authorizationRequest);
+    private void prepareContext(RoutingContext context, Client client, io.gravitee.am.model.User user) {
+        context.put(ConstantKeys.CLIENT_CONTEXT_KEY, client);
+        context.put(ConstantKeys.USER_CONTEXT_KEY, user);
 
         // add id_token if exists
-        String idToken = context.session().get(ID_TOKEN_SESSION_CONTEXT_KEY);
+        String idToken = context.session().get(ConstantKeys.ID_TOKEN_KEY);
         if (idToken != null) {
-            context.put(ID_TOKEN_CONTEXT_KEY, idToken);
+            context.put(ConstantKeys.ID_TOKEN_CONTEXT_KEY, idToken);
         }
     }
 }

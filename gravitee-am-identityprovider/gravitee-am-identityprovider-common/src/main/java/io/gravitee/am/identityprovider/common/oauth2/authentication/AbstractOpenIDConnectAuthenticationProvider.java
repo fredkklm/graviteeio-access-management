@@ -52,6 +52,7 @@ import io.vertx.reactivex.core.MultiMap;
 import io.vertx.reactivex.core.buffer.Buffer;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -63,7 +64,7 @@ import static io.gravitee.am.common.oidc.Scope.SCOPE_DELIMITER;
  * @author Eric LELEU (eric.leleu at graviteesource.com)
  * @author GraviteeSource Team
  */
-public abstract class AbstractOpenIDConnectAuthenticationProvider < T extends OpenIDConnectIdentityProviderConfiguration> extends AbstractSocialAuthenticationProvider implements OpenIDConnectAuthenticationProvider, InitializingBean {
+public abstract class AbstractOpenIDConnectAuthenticationProvider extends AbstractSocialAuthenticationProvider implements OpenIDConnectAuthenticationProvider, InitializingBean {
 
     public static final String HASH_VALUE_PARAMETER = "urlHash";
     public static final String ACCESS_TOKEN_PARAMETER = "access_token";
@@ -92,7 +93,7 @@ public abstract class AbstractOpenIDConnectAuthenticationProvider < T extends Op
     }
 
     @Override
-    public Request signInUrl(String redirectUri) {
+    public Request signInUrl(String redirectUri, String state) {
         try {
             UriBuilder builder = UriBuilder.fromHttpUrl(getConfiguration().getUserAuthorizationUri());
             builder.addParameter(Parameters.CLIENT_ID, getConfiguration().getClientId());
@@ -105,6 +106,11 @@ public abstract class AbstractOpenIDConnectAuthenticationProvider < T extends Op
             if (!io.gravitee.am.common.oauth2.ResponseType.CODE.equals(getConfiguration().getResponseType())) {
                 builder.addParameter(io.gravitee.am.common.oidc.Parameters.NONCE, SecureRandomString.generate());
             }
+            // add state if provided.
+            if(!StringUtils.isEmpty(state)) {
+                builder.addParameter(Parameters.STATE, state);
+            }
+
             // append redirect_uri
             builder.addParameter(Parameters.REDIRECT_URI, getConfiguration().isEncodeRedirectUri() ? UriBuilder.encodeURIComponent(redirectUri) : redirectUri);
 

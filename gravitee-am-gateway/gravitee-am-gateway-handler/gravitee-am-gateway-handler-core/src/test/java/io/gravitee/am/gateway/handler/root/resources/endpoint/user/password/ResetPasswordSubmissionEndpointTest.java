@@ -24,6 +24,9 @@ import io.gravitee.am.model.oidc.Client;
 import io.gravitee.common.http.HttpStatusCode;
 import io.reactivex.Single;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.ext.web.multipart.MultipartForm;
+import io.vertx.reactivex.core.buffer.Buffer;
+import io.vertx.reactivex.ext.web.handler.BodyHandler;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -31,6 +34,8 @@ import org.mockito.runners.MockitoJUnitRunner;
 
 import java.util.Collections;
 
+import static io.vertx.core.http.HttpHeaders.APPLICATION_X_WWW_FORM_URLENCODED;
+import static io.vertx.core.http.HttpHeaders.CONTENT_TYPE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -51,6 +56,7 @@ public class ResetPasswordSubmissionEndpointTest extends RxWebTestBase {
 
         ResetPasswordSubmissionEndpoint resetPasswordSubmissionEndpoint = new ResetPasswordSubmissionEndpoint(userService);
         router.route(HttpMethod.POST, "/resetPassword")
+                .handler(BodyHandler.create())
                 .handler(resetPasswordSubmissionEndpoint)
                 .failureHandler(new ErrorHandler());
     }
@@ -73,15 +79,16 @@ public class ResetPasswordSubmissionEndpointTest extends RxWebTestBase {
         when(userService.resetPassword(eq(client), eq(user), any())).thenReturn(Single.just(new ResetPasswordResponse()));
 
         testRequest(
-                HttpMethod.POST, "/resetPassword?password=toto",
-                null,
+                HttpMethod.POST, "/resetPassword?client_id=client-id",
+                this::postPassword,
                 resp -> {
                     String location = resp.headers().get("location");
                     assertNotNull(location);
-                    assertTrue(location.endsWith("/resetPassword?success=reset_password_completed&client_id=client-id"));
+                    assertTrue(location.endsWith("/resetPassword?client_id=client-id&success=reset_password_completed"));
                 },
                 HttpStatusCode.FOUND_302, "Found", null);
     }
+
 
     @Test
     public void shouldInvokeResetPasswordEndpoint_redirectUri() throws Exception {
@@ -106,13 +113,19 @@ public class ResetPasswordSubmissionEndpointTest extends RxWebTestBase {
         when(userService.resetPassword(eq(client), eq(user), any())).thenReturn(Single.just(resetPasswordResponse));
 
         testRequest(
-                HttpMethod.POST, "/resetPassword?password=toto",
-                null,
+                HttpMethod.POST, "/resetPassword?client_id=client-id",
+                this::postPassword,
                 resp -> {
                     String location = resp.headers().get("location");
                     assertNotNull(location);
                     assertEquals("http://custom_uri", location);
                 },
                 HttpStatusCode.FOUND_302, "Found", null);
+    }
+
+    private void postPassword(io.vertx.reactivex.core.http.HttpClientRequest httpClientRequest) {
+        httpClientRequest.putHeader(CONTENT_TYPE, APPLICATION_X_WWW_FORM_URLENCODED);
+        httpClientRequest.setChunked(true);
+        httpClientRequest.write(Buffer.buffer("password=toto"));
     }
 }

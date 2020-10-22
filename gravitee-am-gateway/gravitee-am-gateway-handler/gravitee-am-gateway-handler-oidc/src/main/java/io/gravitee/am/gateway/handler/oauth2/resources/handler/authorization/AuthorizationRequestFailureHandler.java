@@ -19,15 +19,14 @@ import io.gravitee.am.common.exception.oauth2.OAuth2Exception;
 import io.gravitee.am.common.oauth2.Parameters;
 import io.gravitee.am.common.web.UriBuilder;
 import io.gravitee.am.gateway.handler.common.jwt.JWTService;
+import io.gravitee.am.gateway.handler.common.utils.ConstantKeys;
 import io.gravitee.am.gateway.handler.common.vertx.utils.UriBuilderRequest;
 import io.gravitee.am.gateway.handler.oauth2.exception.JWTOAuth2Exception;
 import io.gravitee.am.gateway.handler.oauth2.exception.RedirectMismatchException;
 import io.gravitee.am.gateway.handler.oauth2.resources.request.AuthorizationRequestFactory;
 import io.gravitee.am.gateway.handler.oauth2.service.request.AuthorizationRequest;
-import io.gravitee.am.gateway.handler.oauth2.service.utils.OAuth2Constants;
 import io.gravitee.am.gateway.handler.oidc.service.discovery.OpenIDDiscoveryService;
 import io.gravitee.am.gateway.handler.oidc.service.jwe.JWEService;
-import io.gravitee.am.model.Domain;
 import io.gravitee.am.model.oidc.Client;
 import io.gravitee.common.http.HttpHeaders;
 import io.gravitee.common.http.HttpStatusCode;
@@ -68,18 +67,13 @@ import static io.gravitee.am.service.utils.ResponseTypeUtils.isImplicitFlow;
 public class AuthorizationRequestFailureHandler implements Handler<RoutingContext> {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthorizationRequestFailureHandler.class);
-    private static final String CLIENT_CONTEXT_KEY = "client";
-    private static final String USER_CONSENT_COMPLETED_CONTEXT_KEY = "userConsentCompleted";
-    private static final String REQUESTED_CONSENT_CONTEXT_KEY = "requestedConsent";
     private static final String ERROR_ENDPOINT = "/oauth/error";
     private final AuthorizationRequestFactory authorizationRequestFactory = new AuthorizationRequestFactory();
-    private String defaultErrorPath;
-    private JWTService jwtService;
-    private JWEService jweService;
-    private OpenIDDiscoveryService openIDDiscoveryService;
+    private final JWTService jwtService;
+    private final JWEService jweService;
+    private final OpenIDDiscoveryService openIDDiscoveryService;
 
-    public AuthorizationRequestFailureHandler(final Domain domain,
-                                              final OpenIDDiscoveryService openIDDiscoveryService,
+    public AuthorizationRequestFailureHandler(final OpenIDDiscoveryService openIDDiscoveryService,
                                               final JWTService jwtService,
                                               final JWEService jweService) {
         this.openIDDiscoveryService = openIDDiscoveryService;
@@ -93,8 +87,8 @@ public class AuthorizationRequestFailureHandler implements Handler<RoutingContex
 
             try {
                 AuthorizationRequest request = resolveInitialAuthorizeRequest(routingContext);
-                Client client = routingContext.get(CLIENT_CONTEXT_KEY);
-                String defaultErrorURL = UriBuilderRequest.resolveProxyRequest(routingContext.request(), routingContext.get(CONTEXT_PATH) + ERROR_ENDPOINT, null);
+                Client client = routingContext.get(ConstantKeys.CLIENT_CONTEXT_KEY);
+                String defaultErrorURL = UriBuilderRequest.resolveProxyRequest(routingContext.request(), routingContext.get(CONTEXT_PATH) + ERROR_ENDPOINT);
                 Throwable throwable = routingContext.failure();
                 if (throwable instanceof OAuth2Exception) {
                     OAuth2Exception oAuth2Exception = (OAuth2Exception) throwable;
@@ -232,7 +226,7 @@ public class AuthorizationRequestFailureHandler implements Handler<RoutingContex
     }
 
     private AuthorizationRequest resolveInitialAuthorizeRequest(RoutingContext routingContext) {
-        AuthorizationRequest authorizationRequest = routingContext.session().get(OAuth2Constants.AUTHORIZATION_REQUEST);
+        AuthorizationRequest authorizationRequest = routingContext.get(ConstantKeys.AUTHORIZATION_REQUEST_CONTEXT_KEY);
         // we have the authorization request in session if we come from the approval user page
         if (authorizationRequest != null) {
             return authorizationRequest;
@@ -247,9 +241,8 @@ public class AuthorizationRequestFailureHandler implements Handler<RoutingContex
     }
 
     private void cleanSession(RoutingContext context) {
-        context.session().remove(OAuth2Constants.AUTHORIZATION_REQUEST);
-        context.session().remove(USER_CONSENT_COMPLETED_CONTEXT_KEY);
-        context.session().remove(REQUESTED_CONSENT_CONTEXT_KEY);
+        context.session().remove(ConstantKeys.TRANSACTION_ID_KEY);
+        context.session().remove(ConstantKeys.USER_CONSENT_COMPLETED_KEY);
     }
 
     private void doRedirect(HttpServerResponse response, String url) {

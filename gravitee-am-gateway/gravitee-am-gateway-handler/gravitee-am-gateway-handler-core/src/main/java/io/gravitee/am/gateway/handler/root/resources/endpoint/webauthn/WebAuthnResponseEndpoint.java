@@ -24,7 +24,9 @@ import io.gravitee.am.gateway.handler.root.resources.auth.handler.FormLoginHandl
 import io.gravitee.am.gateway.handler.vertx.auth.webauthn.WebAuthn;
 import io.gravitee.am.gateway.handler.vertx.auth.webauthn.WebAuthnCredentials;
 import io.gravitee.am.identityprovider.api.Authentication;
+import io.gravitee.am.identityprovider.api.AuthenticationContext;
 import io.gravitee.am.identityprovider.api.SimpleAuthenticationContext;
+import io.gravitee.am.model.Credential;
 import io.gravitee.am.model.Domain;
 import io.gravitee.am.model.ReferenceType;
 import io.gravitee.am.model.oidc.Client;
@@ -99,6 +101,7 @@ public class WebAuthnResponseEndpoint extends WebAuthnEndpoint {
             final Client client = ctx.get(CLIENT_CONTEXT_KEY);
             final String userId = session.get("userId");
             final String username = session.get("username");
+            final String credentialId = webauthnResp.getString("id");
 
             // authenticate the user
             webAuthn.authenticate(
@@ -113,15 +116,25 @@ public class WebAuthnResponseEndpoint extends WebAuthnEndpoint {
                         session.remove("challenge");
 
                         if (authenticate.succeeded()) {
-                            authenticateUser(ctx, client, username, h -> {
+                            // create the authentication context
+                            final AuthenticationContext authenticationContext = createAuthenticationContext(ctx);
+                            // authenticate the user
+                            authenticateUser(authenticationContext, client, username, h -> {
                                 if (h.failed()) {
                                     logger.error("An error has occurred while authenticating user {}", username, h.cause());
                                     ctx.fail(401);
                                     return;
                                 }
                                 final User user = h.result();
-                                // save the user into the credential
-                                updateCredential(webauthnResp.getString("id"), userId, credentialHandler -> {
+                                final io.gravitee.am.model.User authenticatedUser = ((io.gravitee.am.gateway.handler.common.vertx.web.auth.user.User) user).getUser();
+                                // check if the authenticated user is the same as the one in session
+                                if (!userId.equals(authenticatedUser.getId())) {
+                                    logger.error("Invalid authenticated user {}, user in session was {}", authenticatedUser.getId(), userId);
+                                    ctx.fail(401);
+                                    return;
+                                }
+                                // update the credential
+                                updateCredential(authenticationContext, credentialId, userId, credentialHandler -> {
                                     if (credentialHandler.failed()) {
                                         logger.error("An error has occurred while authenticating user {}", username, credentialHandler.cause());
                                         ctx.fail(401);
@@ -133,7 +146,9 @@ public class WebAuthnResponseEndpoint extends WebAuthnEndpoint {
                                     // session should be upgraded as recommended by owasp
                                     session.regenerateId();
                                     ctx.session().put(PASSWORDLESS_AUTH_COMPLETED, true);
-                                    ctx.session().put(WEBAUTHN_CREDENTIAL_ID_CONTEXT_KEY, webauthnResp.getString("id"));// Now redirect back to the original url
+                                    ctx.session().put(WEBAUTHN_CREDENTIAL_ID_CONTEXT_KEY, credentialId);
+
+                                    // Now redirect back to the original url
                                     String returnURL = session.get(FormLoginHandler.DEFAULT_RETURN_URL_PARAM);
                                     ctx.response().putHeader(HttpHeaders.LOCATION, returnURL).end();
                                 });
@@ -152,14 +167,17 @@ public class WebAuthnResponseEndpoint extends WebAuthnEndpoint {
         }
     }
 
-    private void authenticateUser(RoutingContext context, Client client, String username, Handler<AsyncResult<User>> handler) {
+    private AuthenticationContext createAuthenticationContext(RoutingContext context) {
         HttpServerRequest httpServerRequest = context.request();
         SimpleAuthenticationContext authenticationContext = new SimpleAuthenticationContext(new VertxHttpServerRequest(httpServerRequest.getDelegate()));
-        final Authentication authentication = new EndUserAuthentication(username, null, authenticationContext);
         authenticationContext.set(Claims.ip_address, RequestUtils.remoteAddress(httpServerRequest));
         authenticationContext.set(Claims.user_agent, RequestUtils.userAgent(httpServerRequest));
-        authenticationContext.set(Claims.domain, client.getDomain());
+        authenticationContext.set(Claims.domain, domain.getId());
+        return authenticationContext;
+    }
 
+    private void authenticateUser(AuthenticationContext authenticationContext, Client client, String username, Handler<AsyncResult<User>> handler) {
+        final Authentication authentication = new EndUserAuthentication(username, null, authenticationContext);
         userAuthenticationManager.authenticate(client, authentication, true)
                 .subscribe(
                         user -> handler.handle(Future.succeededFuture(new io.gravitee.am.gateway.handler.common.vertx.web.auth.user.User(user))),
@@ -167,8 +185,12 @@ public class WebAuthnResponseEndpoint extends WebAuthnEndpoint {
                 );
     }
 
-    private void updateCredential(String credentialId, String userId, Handler<AsyncResult<Void>> handler) {
-        credentialService.update(ReferenceType.DOMAIN, domain.getId(), credentialId, userId)
+    private void updateCredential(AuthenticationContext authenticationContext, String credentialId, String userId, Handler<AsyncResult<Void>> handler) {
+        Credential credential = new Credential();
+        credential.setUserId(userId);
+        credential.setUserAgent(String.valueOf(authenticationContext.get(Claims.user_agent)));
+        credential.setIpAddress(String.valueOf(authenticationContext.get(Claims.ip_address)));
+        credentialService.update(ReferenceType.DOMAIN, domain.getId(), credentialId, credential)
                 .subscribe(
                         () -> handler.handle(Future.succeededFuture()),
                         error -> handler.handle(Future.failedFuture(error))

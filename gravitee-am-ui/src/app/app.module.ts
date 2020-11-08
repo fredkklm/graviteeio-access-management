@@ -144,7 +144,9 @@ import { UserApplicationComponent } from './domain/settings/users/user/applicati
 import { AddUserRolesComponent, UserRolesComponent } from './domain/settings/users/user/roles/roles.component';
 import { UserFactorsComponent} from './domain/settings/users/user/factors/factors.component';
 import { UserCredentialsComponent } from './domain/settings/users/user/credentials/credentials.component';
+import { UserCredentialComponent } from './domain/settings/users/user/credentials/credential/credential.component';
 import { UserCredentialsResolver } from './resolvers/user-credentials.resolver';
+import { UserCredentialResolver } from './resolvers/user-credential.resolver';
 import { UserService} from './services/user.service';
 import { UsersResolver } from './resolvers/users.resolver';
 import { UserResolver } from './resolvers/user.resolver';
@@ -371,6 +373,7 @@ import { ApplicationLoginSettingsComponent } from './domain/applications/applica
     UserRolesComponent,
     UserFactorsComponent,
     UserCredentialsComponent,
+    UserCredentialComponent,
     AddUserRolesComponent,
     ScopeCreationComponent,
     ScopeComponent,
@@ -504,6 +507,7 @@ import { ApplicationLoginSettingsComponent } from './domain/applications/applica
     UserResolver,
     UserRolesResolver,
     UserCredentialsResolver,
+    UserCredentialResolver,
     ExtensionGrantsResolver,
     ExtensionGrantResolver,
     ScopesResolver,

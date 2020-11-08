@@ -27,7 +27,10 @@ import io.gravitee.am.model.common.event.Event;
 import io.gravitee.am.model.common.event.Payload;
 import io.gravitee.am.repository.management.api.UserRepository;
 import io.gravitee.am.repository.management.api.search.FilterCriteria;
-import io.gravitee.am.service.*;
+import io.gravitee.am.service.EventService;
+import io.gravitee.am.service.GroupService;
+import io.gravitee.am.service.RoleService;
+import io.gravitee.am.service.UserService;
 import io.gravitee.am.service.exception.AbstractManagementException;
 import io.gravitee.am.service.exception.TechnicalManagementException;
 import io.gravitee.am.service.exception.UserAlreadyExistsException;
@@ -69,9 +72,6 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private EventService eventService;
-
-    @Autowired
-    private CredentialService credentialService;
 
     @Override
     public Single<Set<User>> findByDomain(String domain) {
@@ -361,11 +361,6 @@ public class UserServiceImpl implements UserService {
 
                     }
                     return Single.just(user);
-                })
-                // fetch user credentials
-                .zipWith(credentialService.findByUserId(user.getReferenceType(), user.getReferenceId(), user.getId()).map(c -> !c.isEmpty()), (u, c) -> {
-                    u.setWebAuthnRegistrationCompleted(c);
-                    return u;
                 })
                 .onErrorResumeNext(ex -> {
                     if (ex instanceof AbstractManagementException) {
